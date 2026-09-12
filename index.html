@@ -468,6 +468,12 @@
       const ok = await persist({ products: next });
       flash(ok ? "\uC81C\uD488 \uC704\uCE58\uAC00 \uBCC0\uACBD\uB418\uC5C8\uC2B5\uB2C8\uB2E4." : "\uC800\uC7A5 \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4.");
     };
+    const renameProduct = async (productId, name) => {
+      const next = products.map((p) => p.id === productId ? { ...p, name } : p);
+      setProducts(next);
+      const ok = await persist({ products: next });
+      flash(ok ? "\uC81C\uD488\uBA85\uC774 \uBCC0\uACBD\uB418\uC5C8\uC2B5\uB2C8\uB2E4." : "\uC800\uC7A5 \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4.");
+    };
     const importProductsFromExcel = async (file) => {
       var _a, _b, _c;
       try {
@@ -1110,6 +1116,7 @@
           addProduct,
           removeProduct,
           moveProduct,
+          onRenameProduct: renameProduct,
           onToggleExpand: () => setExpandedCategories((s) => ({ ...s, [cat.id]: !s[cat.id] })),
           onSelectCategory: () => {
             setSelection({ type: "category", categoryId: cat.id });
@@ -1335,6 +1342,7 @@
       addProduct,
       removeProduct,
       moveProduct,
+      onRenameProduct,
       onToggleExpand,
       onSelectCategory,
       onSelectProduct,
@@ -1354,18 +1362,43 @@
     const [expandedSubcats, setExpandedSubcats] = useState({});
     const [editingSubId, setEditingSubId] = useState(null);
     const [subDraft, setSubDraft] = useState("");
+    const [editingProductId, setEditingProductId] = useState(null);
+    const [productDraft, setProductDraft] = useState("");
     const renderProductRow = (p) => {
       const pc = pendingCountForProduct(p.id);
       const active = selection.type === "product" && selection.productId === p.id;
       const deleteReq = requests.find((r) => r.type === "delete" && r.productId === p.id);
       const prodFav = favoriteProductIds.includes(p.id);
-      return /* @__PURE__ */ React.createElement("div", { key: p.id, onClick: () => onSelectProduct(p.id), style: { ...styles.productRow, ...active ? styles.productRowActive : {} } }, /* @__PURE__ */ React.createElement("span", { style: prodFav ? styles.starIconOn : styles.starIconOff, onClick: (e) => {
+      const isEditingThis = editingProductId === p.id;
+      return /* @__PURE__ */ React.createElement("div", { key: p.id, onClick: () => !isEditingThis && onSelectProduct(p.id), style: { ...styles.productRow, ...active ? styles.productRowActive : {} } }, /* @__PURE__ */ React.createElement("span", { style: prodFav ? styles.starIconOn : styles.starIconOff, onClick: (e) => {
         e.stopPropagation();
         onToggleFavoriteProduct(p.id);
-      } }, prodFav ? "\u2605" : "\u2606"), /* @__PURE__ */ React.createElement("span", { style: { ...styles.productName, ...deleteReq ? { textDecoration: "line-through", opacity: 0.6 } : {} } }, p.name), /* @__PURE__ */ React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" } }, deleteReq && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("span", { style: styles.pendingTag }, "\uC0AD\uC81C\uB300\uAE30"), canManageRequest(deleteReq) && /* @__PURE__ */ React.createElement("button", { style: styles.chipActionBtn, onClick: (e) => {
+      } }, prodFav ? "\u2605" : "\u2606"), isEditingThis ? /* @__PURE__ */ React.createElement("span", { style: { display: "flex", gap: 4, flex: 1 }, onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement(
+        "input",
+        {
+          autoFocus: true,
+          style: styles.addProductInput,
+          value: productDraft,
+          onChange: (e) => setProductDraft(e.target.value),
+          onKeyDown: (e) => {
+            if (e.key === "Enter") {
+              onRenameProduct(p.id, productDraft.trim() || p.name);
+              setEditingProductId(null);
+            }
+            if (e.key === "Escape") setEditingProductId(null);
+          }
+        }
+      ), /* @__PURE__ */ React.createElement("button", { style: styles.chipActionBtn, onClick: () => {
+        onRenameProduct(p.id, productDraft.trim() || p.name);
+        setEditingProductId(null);
+      } }, "\uC800\uC7A5"), /* @__PURE__ */ React.createElement("button", { style: styles.chipActionBtn, onClick: () => setEditingProductId(null) }, "\uCDE8\uC18C")) : /* @__PURE__ */ React.createElement("span", { style: { ...styles.productName, ...deleteReq ? { textDecoration: "line-through", opacity: 0.6 } : {} } }, p.name), /* @__PURE__ */ React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" } }, deleteReq && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("span", { style: styles.pendingTag }, "\uC0AD\uC81C\uB300\uAE30"), canManageRequest(deleteReq) && /* @__PURE__ */ React.createElement("button", { style: styles.chipActionBtn, onClick: (e) => {
         e.stopPropagation();
         cancelRequest(deleteReq);
-      } }, "\uCDE8\uC18C")), pc > 0 && /* @__PURE__ */ React.createElement("span", { style: styles.countBadgeAlert }, pc), !deleteReq && editMode && /* @__PURE__ */ React.createElement(MoveProductControl, { product: p, categories, subcategories, onMove: moveProduct }), !deleteReq && /* @__PURE__ */ React.createElement("span", { title: "\uC81C\uD488 \uC0AD\uC81C", style: styles.deleteX, onClick: (e) => {
+      } }, "\uCDE8\uC18C")), pc > 0 && /* @__PURE__ */ React.createElement("span", { style: styles.countBadgeAlert }, pc), !deleteReq && editMode && !isEditingThis && /* @__PURE__ */ React.createElement("button", { style: styles.chipActionBtn, onClick: (e) => {
+        e.stopPropagation();
+        setProductDraft(p.name);
+        setEditingProductId(p.id);
+      } }, "\uC218\uC815"), !deleteReq && editMode && /* @__PURE__ */ React.createElement(MoveProductControl, { product: p, categories, subcategories, onMove: moveProduct }), !deleteReq && editMode && /* @__PURE__ */ React.createElement("span", { title: "\uC81C\uD488 \uC0AD\uC81C", style: styles.deleteX, onClick: (e) => {
         e.stopPropagation();
         removeProduct(p.id);
       } }, "\xD7")));
@@ -1386,7 +1419,7 @@
     } }, "\uC800\uC7A5"), /* @__PURE__ */ React.createElement("button", { style: styles.chipActionBtn, onClick: () => setEditingCat(false) }, "\uCDE8\uC18C")) : /* @__PURE__ */ React.createElement("span", { style: styles.categoryName, onClick: onSelectCategory }, cat.name), /* @__PURE__ */ React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 6 } }, pending > 0 && /* @__PURE__ */ React.createElement("span", { style: styles.countBadgeAlert }, pending), /* @__PURE__ */ React.createElement("span", { style: styles.countBadgeMuted }, items.length), isAdmin && editMode && !editingCat && /* @__PURE__ */ React.createElement("button", { style: styles.chipActionBtn, onClick: () => {
       setCatDraft(cat.name);
       setEditingCat(true);
-    } }, "\uC218\uC815"), isAdmin && !editingCat && /* @__PURE__ */ React.createElement("span", { style: styles.tinyLink, onClick: onDeleteCategory }, "\xD7"))), expanded && /* @__PURE__ */ React.createElement("div", { style: styles.productSublist }, subcategoriesForCat.map((sub) => {
+    } }, "\uC218\uC815"), isAdmin && editMode && !editingCat && /* @__PURE__ */ React.createElement("span", { style: styles.tinyLink, onClick: onDeleteCategory }, "\xD7"))), expanded && /* @__PURE__ */ React.createElement("div", { style: styles.productSublist }, subcategoriesForCat.map((sub) => {
       const subItems = items.filter((p) => p.subcategoryId === sub.id);
       const subExpanded = !!expandedSubcats[sub.id];
       return /* @__PURE__ */ React.createElement("div", { key: sub.id, style: { marginBottom: 2 } }, /* @__PURE__ */ React.createElement("div", { style: styles.subcategoryHeader }, /* @__PURE__ */ React.createElement("span", { style: styles.chevronBtn, onClick: () => setExpandedSubcats((s) => ({ ...s, [sub.id]: !s[sub.id] })) }, subExpanded ? "\u25BE" : "\u25B8"), editingSubId === sub.id ? /* @__PURE__ */ React.createElement("span", { style: { display: "flex", gap: 4, flex: 1 } }, /* @__PURE__ */ React.createElement("input", { autoFocus: true, style: styles.addProductInput, value: subDraft, onChange: (e) => setSubDraft(e.target.value), onKeyDown: (e) => {
@@ -1401,7 +1434,7 @@
       } }, "\uC800\uC7A5"), /* @__PURE__ */ React.createElement("button", { style: styles.chipActionBtn, onClick: () => setEditingSubId(null) }, "\uCDE8\uC18C")) : /* @__PURE__ */ React.createElement("span", { style: { flex: 1, cursor: "pointer" }, onClick: () => setExpandedSubcats((s) => ({ ...s, [sub.id]: !s[sub.id] })) }, "\u{1F4C1} ", sub.name), /* @__PURE__ */ React.createElement("span", { style: styles.countBadgeMuted }, subItems.length), editMode && editingSubId !== sub.id && /* @__PURE__ */ React.createElement("button", { style: styles.chipActionBtn, onClick: () => {
         setSubDraft(sub.name);
         setEditingSubId(sub.id);
-      } }, "\uC218\uC815"), editMode && editingSubId !== sub.id && /* @__PURE__ */ React.createElement(MoveSubcategoryControl, { sub, categories, onMove: onMoveSubcategory }), isAdmin && editingSubId !== sub.id && /* @__PURE__ */ React.createElement("span", { style: styles.tinyLink, onClick: () => onDeleteSubcategory(sub.id) }, "\xD7")), subExpanded && /* @__PURE__ */ React.createElement("div", { style: { paddingLeft: 14 } }, subItems.map(renderProductRow), editMode && (addingToSubcategory === sub.id ? /* @__PURE__ */ React.createElement("div", { style: styles.addProductBox, onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("input", { autoFocus: true, style: styles.addProductInput, placeholder: "\uC81C\uD488\uBA85 \uC785\uB825", value: newProductName, onChange: (e) => setNewProductName(e.target.value), onKeyDown: (e) => {
+      } }, "\uC218\uC815"), editMode && editingSubId !== sub.id && /* @__PURE__ */ React.createElement(MoveSubcategoryControl, { sub, categories, onMove: onMoveSubcategory }), isAdmin && editMode && editingSubId !== sub.id && /* @__PURE__ */ React.createElement("span", { style: styles.tinyLink, onClick: () => onDeleteSubcategory(sub.id) }, "\xD7")), subExpanded && /* @__PURE__ */ React.createElement("div", { style: { paddingLeft: 14 } }, subItems.map(renderProductRow), editMode && (addingToSubcategory === sub.id ? /* @__PURE__ */ React.createElement("div", { style: styles.addProductBox, onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("input", { autoFocus: true, style: styles.addProductInput, placeholder: "\uC81C\uD488\uBA85 \uC785\uB825", value: newProductName, onChange: (e) => setNewProductName(e.target.value), onKeyDown: (e) => {
         if (e.key === "Enter") addProduct(cat.id, sub.id);
         if (e.key === "Escape") setAddingToSubcategory(null);
       } }), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, marginTop: 6 } }, /* @__PURE__ */ React.createElement("button", { style: styles.smallPrimaryBtn, onClick: () => addProduct(cat.id, sub.id) }, "\uB4F1\uB85D"), /* @__PURE__ */ React.createElement("button", { style: styles.smallGhostBtn, onClick: () => setAddingToSubcategory(null) }, "\uCDE8\uC18C"))) : /* @__PURE__ */ React.createElement("button", { style: styles.smallGhostBtn, onClick: (e) => {
