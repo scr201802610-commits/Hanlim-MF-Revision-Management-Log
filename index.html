@@ -996,8 +996,12 @@
       groupByStatus = true;
     }
     const visibleChanges = docSearch.trim() ? scopedChanges.filter((c) => {
+      var _a, _b;
       const q = docSearch.trim().toLowerCase();
-      return c.docNumber.toLowerCase().includes(q) || (c.historyText || "").toLowerCase().includes(q) || (c.noteText || "").toLowerCase().includes(q);
+      const memoMatch = (c.memos || []).some(
+        (m) => (m.text || "").toLowerCase().includes(q) || (m.authorName || "").toLowerCase().includes(q) || (m.replies || []).some((r) => (r.text || "").toLowerCase().includes(q) || (r.authorName || "").toLowerCase().includes(q))
+      );
+      return c.docNumber.toLowerCase().includes(q) || (c.changeName || "").toLowerCase().includes(q) || (c.historyText || "").toLowerCase().includes(q) || (c.noteText || "").toLowerCase().includes(q) || (((_a = c.registrant) == null ? void 0 : _a.name) || "").toLowerCase().includes(q) || (((_b = c.attachment) == null ? void 0 : _b.fileName) || "").toLowerCase().includes(q) || memoMatch;
     }) : scopedChanges;
     const isDoneForView = (c) => selection.type === "product" ? !!c.completions[selection.productId] : statusOf(c, products).allDone;
     const inProgressList = visibleChanges.filter((c) => !isDoneForView(c)).slice().sort((a, b) => {
@@ -1041,7 +1045,8 @@
         onEditReply: (memoId, replyId, text) => editReply(c.id, memoId, replyId, text),
         onDeleteReply: (memoId, replyId) => deleteReply(c.id, memoId, replyId),
         onDownloadFile: downloadMemoFile,
-        onViewInAllTab: selection.type !== "all" ? () => jumpToAllTab(c.id) : null
+        onViewInAllTab: selection.type !== "all" ? () => jumpToAllTab(c.id) : null,
+        showExportButton: selection.type === "all" || selection.type === "mytask"
       }
     );
     return /* @__PURE__ */ React.createElement("div", { style: styles.app }, /* @__PURE__ */ React.createElement("style", null, fontFace), /* @__PURE__ */ React.createElement("header", { style: styles.header }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(
@@ -1211,7 +1216,7 @@
       },
       /* @__PURE__ */ React.createElement("option", { value: "" }, "\uC870\uD68C\uD560 \uC0AC\uC6A9\uC790 \uC120\uD0DD"),
       users.slice().sort(byNameAsc).map((u) => /* @__PURE__ */ React.createElement("option", { key: u.empId, value: u.empId }, u.name, " (", teamName(teams, u.team), ")"))
-    ), /* @__PURE__ */ React.createElement("input", { style: styles.searchInput, placeholder: "\uAC80\uC0C9 (\uBCC0\uACBD\uBB38\uC11C\uBC88\uD638, \uB0B4\uC6A9 \uB4F1)", value: docSearch, onChange: (e) => setDocSearch(e.target.value) })), selection.type === "viewUser" && !selection.targetEmpId ? /* @__PURE__ */ React.createElement("div", { style: styles.emptyState }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, color: TOKENS.ink2 } }, "\uC870\uD68C\uD560 \uC0AC\uC6A9\uC790\uB97C \uC120\uD0DD\uD574 \uC8FC\uC138\uC694.")) : visibleChanges.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: styles.emptyState }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, color: TOKENS.ink2, marginBottom: 6 } }, docSearch ? "\uAC80\uC0C9 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4." : products.length === 0 ? "\uBA3C\uC800 \uC67C\uCABD \uC81C\uD615\uC5D0\uC11C \uC81C\uD488\uC744 \uB4F1\uB85D\uD574 \uC8FC\uC138\uC694." : "\uB4F1\uB85D\uB41C \uBCC0\uACBD \uC774\uB825\uC774 \uC5C6\uC2B5\uB2C8\uB2E4."), !docSearch && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: TOKENS.ink3 } }, "\uC6B0\uCE21 \uC0C1\uB2E8\uC758 '\uBCC0\uACBD \uB4F1\uB85D' \uBC84\uD2BC\uC73C\uB85C \uC0C8 \uBCC0\uACBD\uC0AC\uD56D\uC744 \uAE30\uB85D\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.")) : groupByStatus ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: styles.sectionLabel }, /* @__PURE__ */ React.createElement("span", { style: styles.sectionLabelClickable, onClick: () => setCollapseProgressSignal((n) => n + 1), title: "\uC9C4\uD589\uC911 \uD56D\uBAA9 \uBAA8\uB450 \uC811\uAE30" }, "\uC9C4\uD589\uC911 ", /* @__PURE__ */ React.createElement("span", { style: styles.collapseAllIcon }, "\u229F")), /* @__PURE__ */ React.createElement("span", { style: styles.mainCount }, selection.type === "category" ? categoryProductSummary.length : inProgressList.length, "\uAC74")), selection.type === "category" ? categoryProductSummary.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: styles.emptyStateSmall }, "\uC9C4\uD589\uC911\uC778 \uBCC0\uACBD\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.") : /* @__PURE__ */ React.createElement("div", { style: styles.productSummaryList }, categoryProductSummary.map(({ product, docs }) => /* @__PURE__ */ React.createElement("div", { key: product.id, style: styles.productSummaryRow, onClick: () => setSelection({ type: "product", productId: product.id }) }, /* @__PURE__ */ React.createElement("div", { style: styles.productSummaryNameClickable }, product.name), /* @__PURE__ */ React.createElement("div", { style: styles.docChipWrap }, docs.map((d) => /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement("input", { style: styles.searchInput, placeholder: "\uAC80\uC0C9 (\uBB38\uC11C\uBC88\uD638, \uBCC0\uACBD\uBA85, \uB0B4\uC6A9, \uBA54\uBAA8 \uB4F1)", value: docSearch, onChange: (e) => setDocSearch(e.target.value) })), selection.type === "viewUser" && !selection.targetEmpId ? /* @__PURE__ */ React.createElement("div", { style: styles.emptyState }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, color: TOKENS.ink2 } }, "\uC870\uD68C\uD560 \uC0AC\uC6A9\uC790\uB97C \uC120\uD0DD\uD574 \uC8FC\uC138\uC694.")) : visibleChanges.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: styles.emptyState }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, color: TOKENS.ink2, marginBottom: 6 } }, docSearch ? "\uAC80\uC0C9 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4." : products.length === 0 ? "\uBA3C\uC800 \uC67C\uCABD \uC81C\uD615\uC5D0\uC11C \uC81C\uD488\uC744 \uB4F1\uB85D\uD574 \uC8FC\uC138\uC694." : "\uB4F1\uB85D\uB41C \uBCC0\uACBD \uC774\uB825\uC774 \uC5C6\uC2B5\uB2C8\uB2E4."), !docSearch && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: TOKENS.ink3 } }, "\uC6B0\uCE21 \uC0C1\uB2E8\uC758 '\uBCC0\uACBD \uB4F1\uB85D' \uBC84\uD2BC\uC73C\uB85C \uC0C8 \uBCC0\uACBD\uC0AC\uD56D\uC744 \uAE30\uB85D\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.")) : groupByStatus ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: styles.sectionLabel }, /* @__PURE__ */ React.createElement("span", { style: styles.sectionLabelClickable, onClick: () => setCollapseProgressSignal((n) => n + 1), title: "\uC9C4\uD589\uC911 \uD56D\uBAA9 \uBAA8\uB450 \uC811\uAE30" }, "\uC9C4\uD589\uC911 ", /* @__PURE__ */ React.createElement("span", { style: styles.collapseAllIcon }, "\u229F")), /* @__PURE__ */ React.createElement("span", { style: styles.mainCount }, selection.type === "category" ? categoryProductSummary.length : inProgressList.length, "\uAC74")), selection.type === "category" ? categoryProductSummary.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: styles.emptyStateSmall }, "\uC9C4\uD589\uC911\uC778 \uBCC0\uACBD\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.") : /* @__PURE__ */ React.createElement("div", { style: styles.productSummaryList }, categoryProductSummary.map(({ product, docs }) => /* @__PURE__ */ React.createElement("div", { key: product.id, style: styles.productSummaryRow, onClick: () => setSelection({ type: "product", productId: product.id }) }, /* @__PURE__ */ React.createElement("div", { style: styles.productSummaryNameClickable }, product.name), /* @__PURE__ */ React.createElement("div", { style: styles.docChipWrap }, docs.map((d) => /* @__PURE__ */ React.createElement(
       "span",
       {
         key: d.id,
@@ -2003,7 +2008,7 @@
       setEditing(true);
     } }, "\uC218\uC815"), /* @__PURE__ */ React.createElement("button", { style: styles.chipActionBtn, onClick: onDelete }, "\uC0AD\uC81C")));
   }
-  function ChangeCard({ change, products, teams, categories, me, focusProductId, isFocusTarget, focusMemoId, onClearFocus, collapseSignal, showAllProducts, onSetCompletion, canManage, onEdit, onDelete, showReassign, users, onReassign, onAddMemo, onEditMemo, onDeleteMemo, onAddReply, onEditReply, onDeleteReply, onDownloadFile, onViewInAllTab }) {
+  function ChangeCard({ change, products, teams, categories, me, focusProductId, isFocusTarget, focusMemoId, onClearFocus, collapseSignal, showAllProducts, onSetCompletion, canManage, onEdit, onDelete, showReassign, users, onReassign, onAddMemo, onEditMemo, onDeleteMemo, onAddReply, onEditReply, onDeleteReply, onDownloadFile, onViewInAllTab, showExportButton }) {
     var _a, _b;
     const [open, setOpen] = useState(false);
     const [reassigning, setReassigning] = useState(false);
@@ -2035,6 +2040,20 @@
       setMemoDraft("");
       mention.reset();
     };
+    const exportCompletionExcel = () => {
+      try {
+        const rows = relatedProducts.map((p) => {
+          const c = change.completions[p.id];
+          return { "\uC81C\uD488\uBA85": p.name, "Rev.No.": (c == null ? void 0 : c.revNo) || "", "\uC644\uB8CC\uC77C": (c == null ? void 0 : c.date) ? dotFormat(c.date) : "" };
+        });
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "\uC644\uB8CC\uD604\uD669");
+        XLSX.writeFile(wb, `${change.docNumber}_\uC644\uB8CC\uD604\uD669.xlsx`);
+      } catch (e) {
+        alert("\uC5D1\uC140 \uD30C\uC77C \uC0DD\uC131 \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4.");
+      }
+    };
     return /* @__PURE__ */ React.createElement("div", { ref: cardRef, style: { ...styles.card, ...viewDone ? styles.cardCompleted : {}, ...isFocusTarget ? styles.cardFocusHighlight : {} } }, /* @__PURE__ */ React.createElement("div", { style: styles.cardTop, onClick: () => {
       setOpen(!open);
       if (isFocusTarget) onClearFocus();
@@ -2052,7 +2071,10 @@
     }), relatedProducts.length === 0 && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12.5, color: TOKENS.ink3 } }, "\uC0AD\uC81C\uB41C \uC81C\uD488\uB9CC \uC5F0\uACB0\uB418\uC5B4 \uC788\uC2B5\uB2C8\uB2E4"))) : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: TOKENS.ink3, marginTop: 12 } }, "\uC774 \uD654\uBA74\uC740 \uC120\uD0DD\uD55C \uC81C\uD488\uC758 \uBC18\uC601 \uD604\uD669\uB9CC \uD45C\uC2DC\uD569\uB2C8\uB2E4. \uC804\uCCB4 \uC81C\uD488 \uD604\uD669\uC740 '\uC804\uCCB4 \uBCC0\uACBD \uC774\uB825'\uC5D0\uC11C \uD655\uC778\uD558\uC138\uC694."), onViewInAllTab && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 12 } }, /* @__PURE__ */ React.createElement("button", { style: styles.chipActionBtn, onClick: (e) => {
       e.stopPropagation();
       onViewInAllTab();
-    } }, "\uC804\uCCB4 \uBCC0\uACBD \uC774\uB825\uC5D0\uC11C \uBCF4\uAE30")), /* @__PURE__ */ React.createElement("div", { style: styles.fieldLabel }, "\uBA54\uBAA8"), /* @__PURE__ */ React.createElement("div", { style: styles.memoList }, change.memos && change.memos.length > 0 ? change.memos.map((m) => /* @__PURE__ */ React.createElement(
+    } }, "\uC804\uCCB4 \uBCC0\uACBD \uC774\uB825\uC5D0\uC11C \uBCF4\uAE30")), showExportButton && allDone && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 8 } }, /* @__PURE__ */ React.createElement("button", { style: styles.chipActionBtn, onClick: (e) => {
+      e.stopPropagation();
+      exportCompletionExcel();
+    } }, "\u{1F4CA} \uC81C\uD488\uBCC4 \uC644\uB8CC \uD604\uD669 \uC5D1\uC140\uB85C \uCD94\uCD9C")), /* @__PURE__ */ React.createElement("div", { style: styles.fieldLabel }, "\uBA54\uBAA8"), /* @__PURE__ */ React.createElement("div", { style: styles.memoList }, change.memos && change.memos.length > 0 ? change.memos.map((m) => /* @__PURE__ */ React.createElement(
       MemoBlock,
       {
         key: m.id,
