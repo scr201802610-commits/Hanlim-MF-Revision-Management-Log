@@ -59,6 +59,8 @@
   const FAVORITES_KEY = "revledger:favorites:v5";
   const ALARMS_KEY = "revledger:alarms:v5";
   const CUSTOM_TABS_KEY = "revledger:customTabs:v5";
+  const TRASH_KEY = "revledger:trash:v5";
+  const TRASH_RETENTION_DAYS = 7;
   const SESSION_KEY = "revledger:session:v5";
   const DEFAULT_LABELS = {
     all: "\uC804\uCCB4 \uBCC0\uACBD \uC774\uB825",
@@ -168,6 +170,7 @@
     const [favorites, setFavorites] = useState({});
     const [alarms, setAlarms] = useState([]);
     const [customTabs, setCustomTabs] = useState([]);
+    const [trash, setTrash] = useState([]);
     const [products, setProducts] = useState([]);
     const [requests, setRequests] = useState([]);
     const [changes, setChanges] = useState([]);
@@ -182,6 +185,7 @@
     const [showForm, setShowForm] = useState(false);
     const [editingChange, setEditingChange] = useState(null);
     const [docSearch, setDocSearch] = useState("");
+    const [searchScope, setSearchScope] = useState("all");
     const [sidebarProductSearch, setSidebarProductSearch] = useState("");
     const [sidebarEditMode, setSidebarEditMode] = useState(false);
     const [pageProgress, setPageProgress] = useState(1);
@@ -211,10 +215,10 @@
         setPageProgress(1);
         setPageCompleted(1);
       }
-    }, [selection, docSearch]);
+    }, [selection, docSearch, searchScope]);
     useEffect(() => {
       (async () => {
-        const [u, s, p, r, c, lbl, cats, tms, favs, alrs, ctabs, subs] = await Promise.all([
+        const [u, s, p, r, c, lbl, cats, tms, favs, alrs, ctabs, subs, trs] = await Promise.all([
           loadShared(USERS_KEY, []),
           loadShared(SIGNUPS_KEY, []),
           loadShared(PRODUCTS_KEY, []),
@@ -226,7 +230,8 @@
           loadShared(FAVORITES_KEY, {}),
           loadShared(ALARMS_KEY, []),
           loadShared(CUSTOM_TABS_KEY, []),
-          loadShared(SUBCATEGORIES_KEY, [])
+          loadShared(SUBCATEGORIES_KEY, []),
+          loadShared(TRASH_KEY, [])
         ]);
         setUsers(u);
         setSignups(s);
@@ -240,6 +245,10 @@
         setAlarms(alrs);
         setCustomTabs(ctabs);
         setSubcategories(subs);
+        const cutoff = Date.now() - TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1e3;
+        const validTrash = trs.filter((t) => new Date(t.deletedAt).getTime() >= cutoff);
+        setTrash(validTrash);
+        if (validTrash.length !== trs.length) saveShared(TRASH_KEY, validTrash);
         const session = await loadPersonal(SESSION_KEY, null);
         if (session == null ? void 0 : session.empId) {
           const found = u.find((x) => x.empId === session.empId);
@@ -268,6 +277,7 @@
       if (next.tabLabels) jobs.push(saveShared(LABELS_KEY, next.tabLabels));
       if (next.categories) jobs.push(saveShared(CATEGORIES_KEY, next.categories));
       if (next.subcategories) jobs.push(saveShared(SUBCATEGORIES_KEY, next.subcategories));
+      if (next.trash) jobs.push(saveShared(TRASH_KEY, next.trash));
       if (next.teams) jobs.push(saveShared(TEAMS_KEY, next.teams));
       if (next.favorites) jobs.push(saveShared(FAVORITES_KEY, next.favorites));
       if (next.alarms) jobs.push(saveShared(ALARMS_KEY, next.alarms));
@@ -575,6 +585,69 @@
       setAlarms(next);
       persist({ alarms: next });
     };
+    const pushTrash = async (type, data, meta = null, byEmpId = null) => {
+      const item = { trashId: uid(), type, deletedBy: byEmpId || me.empId, deletedAt: (/* @__PURE__ */ new Date()).toISOString(), data, meta };
+      const next = [item, ...trash];
+      setTrash(next);
+      await persist({ trash: next });
+    };
+    const removeFromTrash = async (trashId) => {
+      const next = trash.filter((t) => t.trashId !== trashId);
+      setTrash(next);
+      await persist({ trash: next });
+    };
+    const restoreTrashItem = async (trashId) => {
+      var _a;
+      const item = trash.find((t) => t.trashId === trashId);
+      if (!item) return;
+      if (item.type === "change") {
+        if (changes.some((c) => c.id === item.data.id)) {
+          flash("\uC774\uBBF8 \uC874\uC7AC\uD558\uB294 \uBCC0\uACBD\uC785\uB2C8\uB2E4.");
+          return;
+        }
+        const next = [item.data, ...changes];
+        setChanges(next);
+        await persist({ changes: next });
+      } else if (item.type === "product") {
+        if (products.some((p) => p.id === item.data.id)) {
+          flash("\uC774\uBBF8 \uC874\uC7AC\uD558\uB294 \uC81C\uD488\uC785\uB2C8\uB2E4.");
+          return;
+        }
+        const next = [...products, item.data];
+        setProducts(next);
+        await persist({ products: next });
+      } else if (item.type === "memo") {
+        const parent = changes.find((c) => {
+          var _a2;
+          return c.id === ((_a2 = item.meta) == null ? void 0 : _a2.changeId);
+        });
+        if (!parent) {
+          flash("\uC6D0\uBCF8 \uBCC0\uACBD\uC774 \uC0AD\uC81C\uB418\uC5B4 \uBA54\uBAA8\uB97C \uBCF5\uAD6C\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
+          return;
+        }
+        const next = changes.map((c) => c.id === item.meta.changeId ? { ...c, memos: [...c.memos || [], item.data] } : c);
+        setChanges(next);
+        await persist({ changes: next });
+      } else if (item.type === "reply") {
+        const parent = changes.find((c) => {
+          var _a2;
+          return c.id === ((_a2 = item.meta) == null ? void 0 : _a2.changeId);
+        });
+        const parentMemo = (_a = parent == null ? void 0 : parent.memos) == null ? void 0 : _a.find((m) => {
+          var _a2;
+          return m.id === ((_a2 = item.meta) == null ? void 0 : _a2.memoId);
+        });
+        if (!parent || !parentMemo) {
+          flash("\uC6D0\uBCF8 \uBA54\uBAA8\uAC00 \uC0AD\uC81C\uB418\uC5B4 \uB2F5\uC7A5\uC744 \uBCF5\uAD6C\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
+          return;
+        }
+        const next = changes.map((c) => c.id !== item.meta.changeId ? c : { ...c, memos: c.memos.map((m) => m.id === item.meta.memoId ? { ...m, replies: [...m.replies || [], item.data] } : m) });
+        setChanges(next);
+        await persist({ changes: next });
+      }
+      await removeFromTrash(trashId);
+      flash("\uBCF5\uAD6C\uB418\uC5C8\uC2B5\uB2C8\uB2E4.");
+    };
     const jumpToProductChange = (productId, changeId) => {
       const target = changes.find((c) => c.id === changeId);
       if (!target) return;
@@ -674,11 +747,12 @@
         const confirmed = await askConfirm(`\uD574\uB2F9 \uC81C\uD488(${target.name})\uC744
 \uC815\uB9D0 \uC0AD\uC81C\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?`);
         if (!confirmed) return;
+        await pushTrash("product", target);
         const next = products.filter((p) => p.id !== id);
         setProducts(next);
         if (selection.type === "product" && selection.productId === id) setSelection({ type: "all" });
         const ok = await persist({ products: next });
-        flash(ok ? "\uC0AD\uC81C\uB418\uC5C8\uC2B5\uB2C8\uB2E4." : "\uC800\uC7A5 \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4.");
+        flash(ok ? "\uC0AD\uC81C\uB418\uC5C8\uC2B5\uB2C8\uB2E4. (\uD734\uC9C0\uD1B5\uC5D0\uC11C 7\uC77C\uAC04 \uBCF5\uAD6C \uAC00\uB2A5)" : "\uC800\uC7A5 \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4.");
       } else {
         const confirmed = await askConfirm(`'${target.name}' \uC0AD\uC81C\uB97C \uAD00\uB9AC\uC790\uC5D0\uAC8C \uC694\uCCAD\uD560\uAE4C\uC694?`);
         if (!confirmed) return;
@@ -690,13 +764,15 @@
       }
     };
     const approveRequest = async (req) => {
-      var _a;
+      var _a, _b;
       let nextProducts = products;
       let newProductId = null;
       if (req.type === "add") {
         newProductId = uid();
         nextProducts = [...products, { id: newProductId, name: req.name, categoryId: req.categoryId }];
       } else if (req.type === "delete") {
+        const target = products.find((p) => p.id === req.productId);
+        if (target) await pushTrash("product", target, null, (_a = req.requestedBy) == null ? void 0 : _a.empId);
         nextProducts = products.filter((p) => p.id !== req.productId);
       }
       const nextRequests = requests.filter((r) => r.id !== req.id);
@@ -707,7 +783,7 @@
       const label = req.type === "add" ? `'${req.name}'` : `'${req.productName}'`;
       const action = req.type === "add" ? "\uCD94\uAC00" : "\uC0AD\uC81C";
       const nav = req.type === "add" ? { type: "product", productId: newProductId } : { type: "category", categoryId: req.categoryId };
-      pushAlarms([(_a = req.requestedBy) == null ? void 0 : _a.empId], `${label} \uC81C\uD488 ${action} \uC694\uCCAD\uC774 \uC2B9\uC778\uB418\uC5C8\uC2B5\uB2C8\uB2E4.`, nav);
+      pushAlarms([(_b = req.requestedBy) == null ? void 0 : _b.empId], `${label} \uC81C\uD488 ${action} \uC694\uCCAD\uC774 \uC2B9\uC778\uB418\uC5C8\uC2B5\uB2C8\uB2E4.`, nav);
     };
     const rejectRequest = async (req) => {
       var _a;
@@ -780,10 +856,11 @@
       const confirmed = await askConfirm(`\uD574\uB2F9 \uBCC0\uACBD(${change.docNumber})\uC744
 \uC815\uB9D0 \uC0AD\uC81C\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?`);
       if (!confirmed) return;
+      await pushTrash("change", change);
       const next = changes.filter((c) => c.id !== change.id);
       setChanges(next);
       const ok = await persist({ changes: next });
-      flash(ok ? "\uC0AD\uC81C\uB418\uC5C8\uC2B5\uB2C8\uB2E4." : "\uC800\uC7A5 \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4.");
+      flash(ok ? "\uC0AD\uC81C\uB418\uC5C8\uC2B5\uB2C8\uB2E4. (\uD734\uC9C0\uD1B5\uC5D0\uC11C 7\uC77C\uAC04 \uBCF5\uAD6C \uAC00\uB2A5)" : "\uC800\uC7A5 \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4.");
     };
     const setCompletion = async (changeId, productId, payload) => {
       var _a;
@@ -811,10 +888,14 @@
     const reassignChange = async (changeId, newEmpId) => {
       const target = users.find((u) => u.empId === newEmpId);
       if (!target) return;
+      const before = changes.find((c) => c.id === changeId);
       const next = changes.map((c) => c.id === changeId ? { ...c, registrant: { empId: target.empId, name: target.name, team: target.team } } : c);
       setChanges(next);
       const ok = await persist({ changes: next });
       flash(ok ? "\uB2F4\uB2F9\uC790\uAC00 \uBCC0\uACBD\uB418\uC5C8\uC2B5\uB2C8\uB2E4." : "\uC800\uC7A5 \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4.");
+      if (ok && target.empId !== me.empId) {
+        pushAlarms([target.empId], `${me.name}\uB2D8\uC774 \uBCC0\uACBD(\uBB38\uC11C\uBC88\uD638: ${before == null ? void 0 : before.docNumber})\uC758 \uB2F4\uB2F9\uC790\uB97C \uD68C\uC6D0\uB2D8\uC73C\uB85C \uC9C0\uC815\uD588\uC2B5\uB2C8\uB2E4.`, { type: "mytask", changeId });
+      }
     };
     const uploadMemoFile = async (file) => {
       if (file.size > MAX_FILE_BYTES) {
@@ -877,12 +958,16 @@
       if (!ok) flash("\uC800\uC7A5 \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4.");
     };
     const deleteMemo = async (changeId, memoId) => {
+      var _a;
       const confirmed = await askConfirm("\uD574\uB2F9 \uBA54\uBAA8\uB97C\n\uC815\uB9D0 \uC0AD\uC81C\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?");
       if (!confirmed) return;
+      const parent = changes.find((c) => c.id === changeId);
+      const memo = (_a = parent == null ? void 0 : parent.memos) == null ? void 0 : _a.find((m) => m.id === memoId);
+      if (memo) await pushTrash("memo", memo, { changeId });
       const next = changes.map((c) => c.id !== changeId ? c : { ...c, memos: c.memos.filter((m) => m.id !== memoId) });
       setChanges(next);
       const ok = await persist({ changes: next });
-      flash(ok ? "\uC0AD\uC81C\uB418\uC5C8\uC2B5\uB2C8\uB2E4." : "\uC800\uC7A5 \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4.");
+      flash(ok ? "\uC0AD\uC81C\uB418\uC5C8\uC2B5\uB2C8\uB2E4. (\uD734\uC9C0\uD1B5\uC5D0\uC11C 7\uC77C\uAC04 \uBCF5\uAD6C \uAC00\uB2A5)" : "\uC800\uC7A5 \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4.");
     };
     const addReply = async (changeId, memoId, text, taggedEmpIds = [], taggedTeamIds = []) => {
       const reply = { id: uid(), authorEmpId: me.empId, authorName: me.name, text, createdAt: dotFormat(isoToday()), taggedEmpIds, taggedTeamIds };
@@ -906,12 +991,17 @@
       if (!ok) flash("\uC800\uC7A5 \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4.");
     };
     const deleteReply = async (changeId, memoId, replyId) => {
+      var _a, _b;
       const confirmed = await askConfirm("\uD574\uB2F9 \uB2F5\uC7A5\uC744\n\uC815\uB9D0 \uC0AD\uC81C\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?");
       if (!confirmed) return;
+      const parent = changes.find((c) => c.id === changeId);
+      const memo = (_a = parent == null ? void 0 : parent.memos) == null ? void 0 : _a.find((m) => m.id === memoId);
+      const reply = (_b = memo == null ? void 0 : memo.replies) == null ? void 0 : _b.find((r) => r.id === replyId);
+      if (reply) await pushTrash("reply", reply, { changeId, memoId });
       const next = changes.map((c) => c.id !== changeId ? c : { ...c, memos: c.memos.map((m) => m.id !== memoId ? m : { ...m, replies: (m.replies || []).filter((r) => r.id !== replyId) }) });
       setChanges(next);
       const ok = await persist({ changes: next });
-      flash(ok ? "\uC0AD\uC81C\uB418\uC5C8\uC2B5\uB2C8\uB2E4." : "\uC800\uC7A5 \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4.");
+      flash(ok ? "\uC0AD\uC81C\uB418\uC5C8\uC2B5\uB2C8\uB2E4. (\uD734\uC9C0\uD1B5\uC5D0\uC11C 7\uC77C\uAC04 \uBCF5\uAD6C \uAC00\uB2A5)" : "\uC800\uC7A5 \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4.");
     };
     const saveTabLabels = async (nextLabels) => {
       setTabLabels(nextLabels);
@@ -949,6 +1039,7 @@
     const pendingCountForProduct = (productId) => changes.filter((c) => c.productIds.includes(productId) && !c.completions[productId]).length;
     const myAlarms = alarms.filter((a) => a.toEmpId === me.empId);
     const myUnreadAlarms = myAlarms.filter((a) => !a.read);
+    const myTrash = trash.filter((t) => t.deletedBy === me.empId);
     const productsByCategory = (categoryId) => products.filter((p) => p.categoryId === categoryId).slice().sort(byNameAsc);
     const pendingAddsByCategory = (categoryId) => requests.filter((r) => r.type === "add" && r.categoryId === categoryId);
     const categoryPendingCount = (categoryId) => {
@@ -996,12 +1087,17 @@
       groupByStatus = true;
     }
     const visibleChanges = docSearch.trim() ? scopedChanges.filter((c) => {
-      var _a, _b;
+      var _a, _b, _c;
       const q = docSearch.trim().toLowerCase();
       const memoMatch = (c.memos || []).some(
         (m) => (m.text || "").toLowerCase().includes(q) || (m.authorName || "").toLowerCase().includes(q) || (m.replies || []).some((r) => (r.text || "").toLowerCase().includes(q) || (r.authorName || "").toLowerCase().includes(q))
       );
-      return c.docNumber.toLowerCase().includes(q) || (c.changeName || "").toLowerCase().includes(q) || (c.historyText || "").toLowerCase().includes(q) || (c.noteText || "").toLowerCase().includes(q) || (((_a = c.registrant) == null ? void 0 : _a.name) || "").toLowerCase().includes(q) || (((_b = c.attachment) == null ? void 0 : _b.fileName) || "").toLowerCase().includes(q) || memoMatch;
+      if (searchScope === "doc") return c.docNumber.toLowerCase().includes(q);
+      if (searchScope === "name") return (c.changeName || "").toLowerCase().includes(q);
+      if (searchScope === "content") return (c.historyText || "").toLowerCase().includes(q) || (c.noteText || "").toLowerCase().includes(q);
+      if (searchScope === "memo") return memoMatch;
+      if (searchScope === "registrant") return (((_a = c.registrant) == null ? void 0 : _a.name) || "").toLowerCase().includes(q);
+      return c.docNumber.toLowerCase().includes(q) || (c.changeName || "").toLowerCase().includes(q) || (c.historyText || "").toLowerCase().includes(q) || (c.noteText || "").toLowerCase().includes(q) || (((_b = c.registrant) == null ? void 0 : _b.name) || "").toLowerCase().includes(q) || (((_c = c.attachment) == null ? void 0 : _c.fileName) || "").toLowerCase().includes(q) || memoMatch;
     }) : scopedChanges;
     const isDoneForView = (c) => selection.type === "product" ? !!c.completions[selection.productId] : statusOf(c, products).allDone;
     const inProgressList = visibleChanges.filter((c) => !isDoneForView(c)).slice().sort((a, b) => {
@@ -1068,7 +1164,7 @@
     ), /* @__PURE__ */ React.createElement("div", { style: styles.headerSub }, "\uBCC0\uACBD \uB4F1\uB85D \uC2DC \uAD00\uB828 \uC81C\uD488\uC758 \uAC1C\uC815 \uC774\uB825\uC5D0 \uC790\uB3D9 \uBC18\uC601\uB429\uB2C8\uB2E4")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 14 } }, /* @__PURE__ */ React.createElement("div", { style: styles.meBox }, /* @__PURE__ */ React.createElement("span", { style: styles.meName }, me.name), /* @__PURE__ */ React.createElement("span", { style: styles.meId }, me.empId, " \xB7 ", teamName(teams, me.team), me.isAdmin ? " \xB7 \uAD00\uB9AC\uC790" : ""), /* @__PURE__ */ React.createElement("span", { style: styles.switchLink, onClick: () => setShowPwModal(true) }, "\uBE44\uBC00\uBC88\uD638 \uBCC0\uACBD"), /* @__PURE__ */ React.createElement("span", { style: styles.switchLink, onClick: logout }, "\uB85C\uADF8\uC544\uC6C3")), /* @__PURE__ */ React.createElement("button", { style: styles.primaryBtn, onClick: () => setShowForm(true) }, "\uBCC0\uACBD \uB4F1\uB85D"))), /* @__PURE__ */ React.createElement("nav", { style: styles.topNav }, /* @__PURE__ */ React.createElement("button", { style: { ...styles.navBtn, ...selection.type === "mytask" ? styles.navBtnActive : {} }, onClick: () => setSelection({ type: "mytask" }) }, tabLabels.mytask, " ", /* @__PURE__ */ React.createElement("span", { style: styles.navCount }, changes.filter((c) => {
       var _a;
       return ((_a = c.registrant) == null ? void 0 : _a.empId) === me.empId;
-    }).length)), /* @__PURE__ */ React.createElement("button", { style: { ...styles.navBtn, ...selection.type === "all" ? styles.navBtnActive : {} }, onClick: () => setSelection({ type: "all" }) }, tabLabels.all, " ", /* @__PURE__ */ React.createElement("span", { style: styles.navCount }, changes.length)), /* @__PURE__ */ React.createElement("button", { style: { ...styles.navBtn, ...selection.type === "users" ? styles.navBtnActive : {} }, onClick: () => setSelection({ type: "users" }) }, tabLabels.users, " ", /* @__PURE__ */ React.createElement("span", { style: styles.navCount }, users.length)), /* @__PURE__ */ React.createElement("button", { style: { ...styles.navBtn, ...selection.type === "viewUser" ? styles.navBtnActive : {} }, onClick: () => setSelection({ type: "viewUser", targetEmpId: selection.targetEmpId || null }) }, "\uAC1C\uC778\uBCC4 \uBCC0\uACBD \uC774\uB825 \uC870\uD68C"), customTabs.map((tab) => /* @__PURE__ */ React.createElement("button", { key: tab.id, style: { ...styles.navBtn, ...selection.type === "customtab" && selection.tabId === tab.id ? styles.navBtnActive : {} }, onClick: () => setSelection({ type: "customtab", tabId: tab.id }) }, tab.label)), me.isAdmin && /* @__PURE__ */ React.createElement("button", { style: { ...styles.navBtn, ...selection.type === "admin" ? styles.navBtnActive : {} }, onClick: () => setSelection({ type: "admin" }) }, tabLabels.admin, requests.length + signups.length > 0 && /* @__PURE__ */ React.createElement("span", { style: styles.navCountAlert }, requests.length + signups.length)), /* @__PURE__ */ React.createElement("button", { style: { ...styles.navBtn, ...selection.type === "alarms" ? styles.navBtnActive : {} }, onClick: () => setSelection({ type: "alarms" }) }, "\uC54C\uB78C", myUnreadAlarms.length > 0 && /* @__PURE__ */ React.createElement("span", { style: styles.navCountAlert }, myUnreadAlarms.length)), me.isAdmin && /* @__PURE__ */ React.createElement("button", { style: styles.navEditBtn, onClick: () => setShowLabelsModal(true), title: "\uD0ED \uAD00\uB9AC" }, "\u270E \uD0ED \uAD00\uB9AC")), /* @__PURE__ */ React.createElement("div", { style: styles.bodyRow }, /* @__PURE__ */ React.createElement("aside", { style: styles.sidebar }, /* @__PURE__ */ React.createElement(
+    }).length)), /* @__PURE__ */ React.createElement("button", { style: { ...styles.navBtn, ...selection.type === "all" ? styles.navBtnActive : {} }, onClick: () => setSelection({ type: "all" }) }, tabLabels.all, " ", /* @__PURE__ */ React.createElement("span", { style: styles.navCount }, changes.length)), /* @__PURE__ */ React.createElement("button", { style: { ...styles.navBtn, ...selection.type === "users" ? styles.navBtnActive : {} }, onClick: () => setSelection({ type: "users" }) }, tabLabels.users, " ", /* @__PURE__ */ React.createElement("span", { style: styles.navCount }, users.length)), /* @__PURE__ */ React.createElement("button", { style: { ...styles.navBtn, ...selection.type === "viewUser" ? styles.navBtnActive : {} }, onClick: () => setSelection({ type: "viewUser", targetEmpId: selection.targetEmpId || null }) }, "\uAC1C\uC778\uBCC4 \uBCC0\uACBD \uC774\uB825 \uC870\uD68C"), customTabs.map((tab) => /* @__PURE__ */ React.createElement("button", { key: tab.id, style: { ...styles.navBtn, ...selection.type === "customtab" && selection.tabId === tab.id ? styles.navBtnActive : {} }, onClick: () => setSelection({ type: "customtab", tabId: tab.id }) }, tab.label)), me.isAdmin && /* @__PURE__ */ React.createElement("button", { style: { ...styles.navBtn, ...selection.type === "admin" ? styles.navBtnActive : {} }, onClick: () => setSelection({ type: "admin" }) }, tabLabels.admin, requests.length + signups.length > 0 && /* @__PURE__ */ React.createElement("span", { style: styles.navCountAlert }, requests.length + signups.length)), /* @__PURE__ */ React.createElement("button", { style: { ...styles.navBtn, ...selection.type === "alarms" ? styles.navBtnActive : {} }, onClick: () => setSelection({ type: "alarms" }) }, "\uC54C\uB78C", myUnreadAlarms.length > 0 && /* @__PURE__ */ React.createElement("span", { style: styles.navCountAlert }, myUnreadAlarms.length)), /* @__PURE__ */ React.createElement("button", { style: { ...styles.navBtn, ...selection.type === "trash" ? styles.navBtnActive : {} }, onClick: () => setSelection({ type: "trash" }) }, "\uB0B4 \uD734\uC9C0\uD1B5", myTrash.length > 0 && /* @__PURE__ */ React.createElement("span", { style: styles.navCount }, myTrash.length)), me.isAdmin && /* @__PURE__ */ React.createElement("button", { style: styles.navEditBtn, onClick: () => setShowLabelsModal(true), title: "\uD0ED \uAD00\uB9AC" }, "\u270E \uD0ED \uAD00\uB9AC")), /* @__PURE__ */ React.createElement("div", { style: styles.bodyRow }, /* @__PURE__ */ React.createElement("aside", { style: styles.sidebar }, /* @__PURE__ */ React.createElement(
       "input",
       {
         style: { ...styles.searchInput, width: "100%", boxSizing: "border-box", marginBottom: 12, flexShrink: 0 },
@@ -1207,7 +1303,7 @@
         onAddUserDirect: addUserDirect,
         onViewUser: (empId) => setSelection({ type: "viewUser", targetEmpId: empId })
       }
-    ) : selection.type === "alarms" ? /* @__PURE__ */ React.createElement(AlarmsPanel, { alarms: myAlarms, onNavigate: openAlarm, onMarkRead: markAlarmRead }) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: styles.mainHeaderRow }, /* @__PURE__ */ React.createElement("h2", { style: styles.mainTitle }, mainTitle), /* @__PURE__ */ React.createElement("span", { style: styles.mainCount }, visibleChanges.length, "\uAC74"), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }), selection.type === "viewUser" && /* @__PURE__ */ React.createElement(
+    ) : selection.type === "alarms" ? /* @__PURE__ */ React.createElement(AlarmsPanel, { alarms: myAlarms, onNavigate: openAlarm, onMarkRead: markAlarmRead }) : selection.type === "trash" ? /* @__PURE__ */ React.createElement(TrashPanel, { trash: myTrash, products, categories, onRestore: restoreTrashItem }) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: styles.mainHeaderRow }, /* @__PURE__ */ React.createElement("h2", { style: styles.mainTitle }, mainTitle), /* @__PURE__ */ React.createElement("span", { style: styles.mainCount }, visibleChanges.length, "\uAC74"), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }), selection.type === "viewUser" && /* @__PURE__ */ React.createElement(
       "select",
       {
         style: { ...styles.dateInput, marginRight: 8 },
@@ -1216,7 +1312,7 @@
       },
       /* @__PURE__ */ React.createElement("option", { value: "" }, "\uC870\uD68C\uD560 \uC0AC\uC6A9\uC790 \uC120\uD0DD"),
       users.slice().sort(byNameAsc).map((u) => /* @__PURE__ */ React.createElement("option", { key: u.empId, value: u.empId }, u.name, " (", teamName(teams, u.team), ")"))
-    ), /* @__PURE__ */ React.createElement("input", { style: styles.searchInput, placeholder: "\uAC80\uC0C9 (\uBB38\uC11C\uBC88\uD638, \uBCC0\uACBD\uBA85, \uB0B4\uC6A9, \uBA54\uBAA8 \uB4F1)", value: docSearch, onChange: (e) => setDocSearch(e.target.value) })), selection.type === "viewUser" && !selection.targetEmpId ? /* @__PURE__ */ React.createElement("div", { style: styles.emptyState }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, color: TOKENS.ink2 } }, "\uC870\uD68C\uD560 \uC0AC\uC6A9\uC790\uB97C \uC120\uD0DD\uD574 \uC8FC\uC138\uC694.")) : visibleChanges.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: styles.emptyState }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, color: TOKENS.ink2, marginBottom: 6 } }, docSearch ? "\uAC80\uC0C9 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4." : products.length === 0 ? "\uBA3C\uC800 \uC67C\uCABD \uC81C\uD615\uC5D0\uC11C \uC81C\uD488\uC744 \uB4F1\uB85D\uD574 \uC8FC\uC138\uC694." : "\uB4F1\uB85D\uB41C \uBCC0\uACBD \uC774\uB825\uC774 \uC5C6\uC2B5\uB2C8\uB2E4."), !docSearch && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: TOKENS.ink3 } }, "\uC6B0\uCE21 \uC0C1\uB2E8\uC758 '\uBCC0\uACBD \uB4F1\uB85D' \uBC84\uD2BC\uC73C\uB85C \uC0C8 \uBCC0\uACBD\uC0AC\uD56D\uC744 \uAE30\uB85D\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.")) : groupByStatus ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: styles.sectionLabel }, /* @__PURE__ */ React.createElement("span", { style: styles.sectionLabelClickable, onClick: () => setCollapseProgressSignal((n) => n + 1), title: "\uC9C4\uD589\uC911 \uD56D\uBAA9 \uBAA8\uB450 \uC811\uAE30" }, "\uC9C4\uD589\uC911 ", /* @__PURE__ */ React.createElement("span", { style: styles.collapseAllIcon }, "\u229F")), /* @__PURE__ */ React.createElement("span", { style: styles.mainCount }, selection.type === "category" ? categoryProductSummary.length : inProgressList.length, "\uAC74")), selection.type === "category" ? categoryProductSummary.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: styles.emptyStateSmall }, "\uC9C4\uD589\uC911\uC778 \uBCC0\uACBD\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.") : /* @__PURE__ */ React.createElement("div", { style: styles.productSummaryList }, categoryProductSummary.map(({ product, docs }) => /* @__PURE__ */ React.createElement("div", { key: product.id, style: styles.productSummaryRow, onClick: () => setSelection({ type: "product", productId: product.id }) }, /* @__PURE__ */ React.createElement("div", { style: styles.productSummaryNameClickable }, product.name), /* @__PURE__ */ React.createElement("div", { style: styles.docChipWrap }, docs.map((d) => /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 0 } }, /* @__PURE__ */ React.createElement("select", { style: { ...styles.dateInput, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: "none" }, value: searchScope, onChange: (e) => setSearchScope(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "all" }, "\uC804\uCCB4"), /* @__PURE__ */ React.createElement("option", { value: "doc" }, "\uBB38\uC11C\uBC88\uD638"), /* @__PURE__ */ React.createElement("option", { value: "name" }, "\uBCC0\uACBD\uBA85"), /* @__PURE__ */ React.createElement("option", { value: "content" }, "\uB0B4\uC6A9"), /* @__PURE__ */ React.createElement("option", { value: "memo" }, "\uBA54\uBAA8"), /* @__PURE__ */ React.createElement("option", { value: "registrant" }, "\uB4F1\uB85D\uC790")), /* @__PURE__ */ React.createElement("input", { style: { ...styles.searchInput, width: 200, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }, placeholder: "\uAC80\uC0C9\uC5B4 \uC785\uB825", value: docSearch, onChange: (e) => setDocSearch(e.target.value) }))), selection.type === "viewUser" && !selection.targetEmpId ? /* @__PURE__ */ React.createElement("div", { style: styles.emptyState }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, color: TOKENS.ink2 } }, "\uC870\uD68C\uD560 \uC0AC\uC6A9\uC790\uB97C \uC120\uD0DD\uD574 \uC8FC\uC138\uC694.")) : visibleChanges.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: styles.emptyState }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, color: TOKENS.ink2, marginBottom: 6 } }, docSearch ? "\uAC80\uC0C9 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4." : products.length === 0 ? "\uBA3C\uC800 \uC67C\uCABD \uC81C\uD615\uC5D0\uC11C \uC81C\uD488\uC744 \uB4F1\uB85D\uD574 \uC8FC\uC138\uC694." : "\uB4F1\uB85D\uB41C \uBCC0\uACBD \uC774\uB825\uC774 \uC5C6\uC2B5\uB2C8\uB2E4."), !docSearch && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: TOKENS.ink3 } }, "\uC6B0\uCE21 \uC0C1\uB2E8\uC758 '\uBCC0\uACBD \uB4F1\uB85D' \uBC84\uD2BC\uC73C\uB85C \uC0C8 \uBCC0\uACBD\uC0AC\uD56D\uC744 \uAE30\uB85D\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.")) : groupByStatus ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: styles.sectionLabel }, /* @__PURE__ */ React.createElement("span", { style: styles.sectionLabelClickable, onClick: () => setCollapseProgressSignal((n) => n + 1), title: "\uC9C4\uD589\uC911 \uD56D\uBAA9 \uBAA8\uB450 \uC811\uAE30" }, "\uC9C4\uD589\uC911 ", /* @__PURE__ */ React.createElement("span", { style: styles.collapseAllIcon }, "\u229F")), /* @__PURE__ */ React.createElement("span", { style: styles.mainCount }, selection.type === "category" ? categoryProductSummary.length : inProgressList.length, "\uAC74")), selection.type === "category" ? categoryProductSummary.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: styles.emptyStateSmall }, "\uC9C4\uD589\uC911\uC778 \uBCC0\uACBD\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.") : /* @__PURE__ */ React.createElement("div", { style: styles.productSummaryList }, categoryProductSummary.map(({ product, docs }) => /* @__PURE__ */ React.createElement("div", { key: product.id, style: styles.productSummaryRow, onClick: () => setSelection({ type: "product", productId: product.id }) }, /* @__PURE__ */ React.createElement("div", { style: styles.productSummaryNameClickable }, product.name), /* @__PURE__ */ React.createElement("div", { style: styles.docChipWrap }, docs.map((d) => /* @__PURE__ */ React.createElement(
       "span",
       {
         key: d.id,
@@ -1677,6 +1773,48 @@
       var _a, _b;
       return /* @__PURE__ */ React.createElement("div", { key: r.id, style: styles.card }, /* @__PURE__ */ React.createElement("div", { style: { padding: "13px 16px", display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 600 } }, r.type === "add" ? /* @__PURE__ */ React.createElement(React.Fragment, null, "\uC81C\uD488 \uCD94\uAC00 \uC694\uCCAD \u2014 ", r.name, " ", /* @__PURE__ */ React.createElement("span", { style: styles.progressTag }, catName(categories, r.categoryId))) : /* @__PURE__ */ React.createElement(React.Fragment, null, "\uC81C\uD488 \uC0AD\uC81C \uC694\uCCAD \u2014 ", r.productName)), /* @__PURE__ */ React.createElement("div", { style: styles.cardMeta }, "\uC694\uCCAD\uC790 ", (_a = r.requestedBy) == null ? void 0 : _a.name, " (", (_b = r.requestedBy) == null ? void 0 : _b.empId, ") \xB7 ", r.requestedAt)), /* @__PURE__ */ React.createElement("button", { style: styles.completeBtn, onClick: () => onApprove(r) }, "\uC2B9\uC778"), /* @__PURE__ */ React.createElement("button", { style: styles.ghostBtn, onClick: () => onReject(r) }, "\uAC70\uBD80")));
     })));
+  }
+  function daysLeft(deletedAt) {
+    const elapsedMs = Date.now() - new Date(deletedAt).getTime();
+    const elapsedDays = Math.floor(elapsedMs / (24 * 60 * 60 * 1e3));
+    return Math.max(0, TRASH_RETENTION_DAYS - elapsedDays);
+  }
+  function TrashPanel({ trash, products, categories, onRestore }) {
+    const groups = [
+      { type: "change", label: "\uBCC0\uACBD" },
+      { type: "product", label: "\uC81C\uD488" },
+      { type: "memo", label: "\uBA54\uBAA8" },
+      { type: "reply", label: "\uB2F5\uC7A5" }
+    ];
+    return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: styles.mainHeaderRow }, /* @__PURE__ */ React.createElement("h2", { style: styles.mainTitle }, "\uB0B4 \uD734\uC9C0\uD1B5"), /* @__PURE__ */ React.createElement("span", { style: styles.mainCount }, trash.length, "\uAC74 \xB7 \uC0AD\uC81C \uD6C4 7\uC77C\uAC04 \uBCF4\uAD00")), groups.map((g) => {
+      const items = trash.filter((t) => t.type === g.type);
+      return /* @__PURE__ */ React.createElement(TrashGroup, { key: g.type, label: g.label, items, products, categories, onRestore });
+    }));
+  }
+  function TrashGroup({ label, items, products, categories, onRestore }) {
+    const [page, setPage] = useState(1);
+    return /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 24 } }, /* @__PURE__ */ React.createElement("div", { style: styles.sectionLabel }, label, " ", /* @__PURE__ */ React.createElement("span", { style: styles.mainCount }, items.length, "\uAC74")), items.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: styles.emptyStateSmall }, "\uC0AD\uC81C\uB41C ", label, "\uC774(\uAC00) \uC5C6\uC2B5\uB2C8\uB2E4.") : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: styles.ledger }, items.slice((page - 1) * 5, page * 5).map((item) => /* @__PURE__ */ React.createElement(TrashRow, { key: item.trashId, item, products, categories, onRestore }))), /* @__PURE__ */ React.createElement(Pager, { page, totalItems: items.length, onChange: setPage })));
+  }
+  function TrashRow({ item, products, categories, onRestore }) {
+    var _a, _b, _c;
+    const left = daysLeft(item.deletedAt);
+    let title = "";
+    let sub = "";
+    if (item.type === "change") {
+      title = item.data.docNumber + (item.data.changeName ? ` \u2014 ${item.data.changeName}` : "");
+      sub = `\uAD00\uB828 \uC81C\uD488 ${((_a = item.data.productIds) == null ? void 0 : _a.length) || 0}\uAC74`;
+    } else if (item.type === "product") {
+      const catName_ = catName(categories, item.data.categoryId);
+      title = item.data.name;
+      sub = catName_;
+    } else if (item.type === "memo") {
+      title = ((_b = item.data.text) == null ? void 0 : _b.slice(0, 40)) || "(\uB0B4\uC6A9 \uC5C6\uC74C)";
+      sub = `\uC791\uC131\uC790 ${item.data.authorName}`;
+    } else if (item.type === "reply") {
+      title = ((_c = item.data.text) == null ? void 0 : _c.slice(0, 40)) || "(\uB0B4\uC6A9 \uC5C6\uC74C)";
+      sub = `\uC791\uC131\uC790 ${item.data.authorName}`;
+    }
+    return /* @__PURE__ */ React.createElement("div", { style: styles.card }, /* @__PURE__ */ React.createElement("div", { style: { padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13.5, fontWeight: 600, color: TOKENS.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, title), /* @__PURE__ */ React.createElement("div", { style: styles.cardMeta }, sub, " \xB7 \uC0AD\uC81C\uC77C ", dotFormat(item.deletedAt.slice(0, 10)), " \xB7 ", left > 0 ? `${left}\uC77C \uD6C4 \uC644\uC804 \uC0AD\uC81C` : "\uACE7 \uC644\uC804 \uC0AD\uC81C\uB429\uB2C8\uB2E4")), /* @__PURE__ */ React.createElement("button", { style: styles.chipActionBtn, onClick: () => onRestore(item.trashId) }, "\uBCF5\uAD6C")));
   }
   function AlarmsPanel({ alarms, onNavigate, onMarkRead }) {
     const [pageUnread, setPageUnread] = useState(1);
