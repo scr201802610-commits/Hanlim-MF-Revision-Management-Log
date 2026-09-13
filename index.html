@@ -598,6 +598,8 @@
     };
     const restoreTrashItem = async (trashId) => {
       var _a;
+      const confirmed = await askConfirm("\uC815\uB9D0 \uBCF5\uAD6C\uB97C \uC9C4\uD589\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?");
+      if (!confirmed) return;
       const item = trash.find((t) => t.trashId === trashId);
       if (!item) return;
       if (item.type === "change") {
@@ -647,6 +649,12 @@
       }
       await removeFromTrash(trashId);
       flash("\uBCF5\uAD6C\uB418\uC5C8\uC2B5\uB2C8\uB2E4.");
+    };
+    const permanentlyDeleteTrashItem = async (trashId) => {
+      const confirmed = await askConfirm("\uC815\uB9D0 \uC644\uC804 \uC0AD\uC81C\uB97C \uC9C4\uD589\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?");
+      if (!confirmed) return;
+      await removeFromTrash(trashId);
+      flash("\uC644\uC804\uD788 \uC0AD\uC81C\uB418\uC5C8\uC2B5\uB2C8\uB2E4.");
     };
     const jumpToProductChange = (productId, changeId) => {
       const target = changes.find((c) => c.id === changeId);
@@ -1149,15 +1157,7 @@
       "div",
       {
         style: { display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4, cursor: "pointer" },
-        onClick: () => {
-          setSelection({ type: "mytask" });
-          setExpandedCategories({});
-          setDocSearch("");
-          setFocusChangeId(null);
-          setFocusMemoId(null);
-          setCollapseSignal((n) => n + 1);
-          setSidebarEditMode(false);
-        }
+        onClick: () => window.location.reload()
       },
       /* @__PURE__ */ React.createElement("img", { src: LOGO_DATA_URI, alt: "\uD55C\uB9BC\uC81C\uC57D", style: styles.headerLogo }),
       /* @__PURE__ */ React.createElement("span", { style: styles.title }, "\uC81C\uD488\uD45C\uC900\uC11C \uAC1C\uC815 \uAD00\uB9AC\uB300\uC7A5")
@@ -1303,7 +1303,7 @@
         onAddUserDirect: addUserDirect,
         onViewUser: (empId) => setSelection({ type: "viewUser", targetEmpId: empId })
       }
-    ) : selection.type === "alarms" ? /* @__PURE__ */ React.createElement(AlarmsPanel, { alarms: myAlarms, onNavigate: openAlarm, onMarkRead: markAlarmRead }) : selection.type === "trash" ? /* @__PURE__ */ React.createElement(TrashPanel, { trash: myTrash, products, categories, onRestore: restoreTrashItem }) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: styles.mainHeaderRow }, /* @__PURE__ */ React.createElement("h2", { style: styles.mainTitle }, mainTitle), /* @__PURE__ */ React.createElement("span", { style: styles.mainCount }, visibleChanges.length, "\uAC74"), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }), selection.type === "viewUser" && /* @__PURE__ */ React.createElement(
+    ) : selection.type === "alarms" ? /* @__PURE__ */ React.createElement(AlarmsPanel, { alarms: myAlarms, onNavigate: openAlarm, onMarkRead: markAlarmRead }) : selection.type === "trash" ? /* @__PURE__ */ React.createElement(TrashPanel, { trash: myTrash, products, categories, onRestore: restoreTrashItem, onPermanentDelete: permanentlyDeleteTrashItem }) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: styles.mainHeaderRow }, /* @__PURE__ */ React.createElement("h2", { style: styles.mainTitle }, mainTitle), /* @__PURE__ */ React.createElement("span", { style: styles.mainCount }, visibleChanges.length, "\uAC74"), /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }), selection.type === "viewUser" && /* @__PURE__ */ React.createElement(
       "select",
       {
         style: { ...styles.dateInput, marginRight: 8 },
@@ -1779,7 +1779,7 @@
     const elapsedDays = Math.floor(elapsedMs / (24 * 60 * 60 * 1e3));
     return Math.max(0, TRASH_RETENTION_DAYS - elapsedDays);
   }
-  function TrashPanel({ trash, products, categories, onRestore }) {
+  function TrashPanel({ trash, products, categories, onRestore, onPermanentDelete }) {
     const groups = [
       { type: "change", label: "\uBCC0\uACBD" },
       { type: "product", label: "\uC81C\uD488" },
@@ -1788,14 +1788,14 @@
     ];
     return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: styles.mainHeaderRow }, /* @__PURE__ */ React.createElement("h2", { style: styles.mainTitle }, "\uB0B4 \uD734\uC9C0\uD1B5"), /* @__PURE__ */ React.createElement("span", { style: styles.mainCount }, trash.length, "\uAC74 \xB7 \uC0AD\uC81C \uD6C4 7\uC77C\uAC04 \uBCF4\uAD00")), groups.map((g) => {
       const items = trash.filter((t) => t.type === g.type);
-      return /* @__PURE__ */ React.createElement(TrashGroup, { key: g.type, label: g.label, items, products, categories, onRestore });
+      return /* @__PURE__ */ React.createElement(TrashGroup, { key: g.type, label: g.label, items, products, categories, onRestore, onPermanentDelete });
     }));
   }
-  function TrashGroup({ label, items, products, categories, onRestore }) {
+  function TrashGroup({ label, items, products, categories, onRestore, onPermanentDelete }) {
     const [page, setPage] = useState(1);
-    return /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 24 } }, /* @__PURE__ */ React.createElement("div", { style: styles.sectionLabel }, label, " ", /* @__PURE__ */ React.createElement("span", { style: styles.mainCount }, items.length, "\uAC74")), items.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: styles.emptyStateSmall }, "\uC0AD\uC81C\uB41C ", label, "\uC774(\uAC00) \uC5C6\uC2B5\uB2C8\uB2E4.") : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: styles.ledger }, items.slice((page - 1) * 5, page * 5).map((item) => /* @__PURE__ */ React.createElement(TrashRow, { key: item.trashId, item, products, categories, onRestore }))), /* @__PURE__ */ React.createElement(Pager, { page, totalItems: items.length, onChange: setPage })));
+    return /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 24 } }, /* @__PURE__ */ React.createElement("div", { style: styles.sectionLabel }, label, " ", /* @__PURE__ */ React.createElement("span", { style: styles.mainCount }, items.length, "\uAC74")), items.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: styles.emptyStateSmall }, "\uC0AD\uC81C\uB41C ", label, "\uC774(\uAC00) \uC5C6\uC2B5\uB2C8\uB2E4.") : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: styles.ledger }, items.slice((page - 1) * 5, page * 5).map((item) => /* @__PURE__ */ React.createElement(TrashRow, { key: item.trashId, item, products, categories, onRestore, onPermanentDelete }))), /* @__PURE__ */ React.createElement(Pager, { page, totalItems: items.length, onChange: setPage })));
   }
-  function TrashRow({ item, products, categories, onRestore }) {
+  function TrashRow({ item, products, categories, onRestore, onPermanentDelete }) {
     var _a, _b, _c;
     const left = daysLeft(item.deletedAt);
     let title = "";
@@ -1814,7 +1814,7 @@
       title = ((_c = item.data.text) == null ? void 0 : _c.slice(0, 40)) || "(\uB0B4\uC6A9 \uC5C6\uC74C)";
       sub = `\uC791\uC131\uC790 ${item.data.authorName}`;
     }
-    return /* @__PURE__ */ React.createElement("div", { style: styles.card }, /* @__PURE__ */ React.createElement("div", { style: { padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13.5, fontWeight: 600, color: TOKENS.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, title), /* @__PURE__ */ React.createElement("div", { style: styles.cardMeta }, sub, " \xB7 \uC0AD\uC81C\uC77C ", dotFormat(item.deletedAt.slice(0, 10)), " \xB7 ", left > 0 ? `${left}\uC77C \uD6C4 \uC644\uC804 \uC0AD\uC81C` : "\uACE7 \uC644\uC804 \uC0AD\uC81C\uB429\uB2C8\uB2E4")), /* @__PURE__ */ React.createElement("button", { style: styles.chipActionBtn, onClick: () => onRestore(item.trashId) }, "\uBCF5\uAD6C")));
+    return /* @__PURE__ */ React.createElement("div", { style: styles.card }, /* @__PURE__ */ React.createElement("div", { style: { padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13.5, fontWeight: 600, color: TOKENS.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, title), /* @__PURE__ */ React.createElement("div", { style: styles.cardMeta }, sub, " \xB7 \uC0AD\uC81C\uC77C ", dotFormat(item.deletedAt.slice(0, 10)), " \xB7 ", left > 0 ? `${left}\uC77C \uD6C4 \uC644\uC804 \uC0AD\uC81C` : "\uACE7 \uC644\uC804 \uC0AD\uC81C\uB429\uB2C8\uB2E4")), /* @__PURE__ */ React.createElement("button", { style: styles.chipActionBtn, onClick: () => onRestore(item.trashId) }, "\uBCF5\uAD6C"), /* @__PURE__ */ React.createElement("button", { style: styles.chipActionBtn, onClick: () => onPermanentDelete(item.trashId) }, "\uC644\uC804 \uC0AD\uC81C")));
   }
   function AlarmsPanel({ alarms, onNavigate, onMarkRead }) {
     const [pageUnread, setPageUnread] = useState(1);
