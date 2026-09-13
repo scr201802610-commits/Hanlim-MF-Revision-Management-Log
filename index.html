@@ -2026,7 +2026,7 @@
       }
     }, [isFocusTarget]);
     useEffect(() => {
-      if (collapseSignal) setOpen(false);
+      if (collapseSignal && !isFocusTarget) setOpen(false);
     }, [collapseSignal]);
     const submitMemo = () => {
       const text = memoDraft.trim();
