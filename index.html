@@ -460,18 +460,16 @@
       flash(ok ? "\uBB38\uC11C\uD568 \uC774\uB984\uC774 \uBCC0\uACBD\uB418\uC5C8\uC2B5\uB2C8\uB2E4." : "\uC800\uC7A5 \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4.");
     };
     const deleteSubcategory = async (id) => {
-      if (products.some((p) => p.subcategoryId === id)) {
-        flash("\uC774 \uBB38\uC11C\uD568\uC5D0 \uC18D\uD55C \uC81C\uD488\uC774 \uC788\uC5B4 \uC0AD\uC81C\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
-        return;
-      }
       const targetSub = subcategories.find((s) => s.id === id);
       const confirmed = await askConfirm(`\uD574\uB2F9 \uBB38\uC11C\uD568(${targetSub == null ? void 0 : targetSub.name})\uC744
 \uC815\uB9D0 \uC0AD\uC81C\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?`);
       if (!confirmed) return;
-      const next = subcategories.filter((s) => s.id !== id);
-      setSubcategories(next);
-      const ok = await persist({ subcategories: next });
-      flash(ok ? "\uBB38\uC11C\uD568\uC774 \uC0AD\uC81C\uB418\uC5C8\uC2B5\uB2C8\uB2E4." : "\uC800\uC7A5 \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4.");
+      const nextProducts = products.map((p) => p.subcategoryId === id ? { ...p, subcategoryId: null } : p);
+      const nextSubcategories = subcategories.filter((s) => s.id !== id);
+      setProducts(nextProducts);
+      setSubcategories(nextSubcategories);
+      const ok = await persist({ products: nextProducts, subcategories: nextSubcategories });
+      flash(ok ? "\uBB38\uC11C\uD568\uC774 \uC0AD\uC81C\uB418\uC5C8\uC2B5\uB2C8\uB2E4. (\uC18C\uC18D \uC81C\uD488\uC740 \uBBF8\uBD84\uB958\uB85C \uC774\uB3D9\uB428)" : "\uC800\uC7A5 \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4.");
     };
     const moveSubcategory = async (id, newCategoryId) => {
       const nextSubcategories = subcategories.map((s) => s.id === id ? { ...s, categoryId: newCategoryId } : s);
@@ -1723,7 +1721,25 @@
     return /* @__PURE__ */ React.createElement("div", { style: styles.pagerRow }, /* @__PURE__ */ React.createElement("span", { style: styles.pagerTriangleBtn, onClick: () => canFirst && onChange(1) }, /* @__PURE__ */ React.createElement(DoubleTriangleLeft, { disabled: !canFirst })), /* @__PURE__ */ React.createElement("span", { style: styles.pagerTriangleBtn, onClick: () => canPrevPage && onChange(page - 1) }, /* @__PURE__ */ React.createElement(TriangleLeft, { disabled: !canPrevPage })), pages.map((p) => /* @__PURE__ */ React.createElement("span", { key: p, style: { ...styles.pagerNum, ...p === page ? styles.pagerNumActive : {} }, onClick: () => onChange(p) }, p)), /* @__PURE__ */ React.createElement("span", { style: styles.pagerTriangleBtn, onClick: () => canNextPage && onChange(page + 1) }, /* @__PURE__ */ React.createElement(TriangleRight, { disabled: !canNextPage })), /* @__PURE__ */ React.createElement("span", { style: styles.pagerTriangleBtn, onClick: () => canLast && onChange(totalPages) }, /* @__PURE__ */ React.createElement(DoubleTriangleRight, { disabled: !canLast })));
   }
   function ConfirmModal({ message, onYes, onNo }) {
-    return /* @__PURE__ */ React.createElement("div", { style: styles.overlay, onMouseDown: (e) => e.target === e.currentTarget && onNo() }, /* @__PURE__ */ React.createElement("div", { style: { ...styles.modal, width: 320 } }, /* @__PURE__ */ React.createElement("div", { style: { padding: "24px 22px 18px", fontSize: 14.5, color: TOKENS.ink, textAlign: "center", whiteSpace: "pre-line", lineHeight: 1.6 } }, message), /* @__PURE__ */ React.createElement("div", { style: { ...styles.modalFooter, justifyContent: "center" } }, /* @__PURE__ */ React.createElement("button", { style: styles.ghostBtn, onClick: onNo }, "\uC544\uB2C8\uC624"), /* @__PURE__ */ React.createElement("button", { style: styles.primaryBtn, onClick: onYes }, "\uC608"))));
+    const [selected, setSelected] = useState("yes");
+    useEffect(() => {
+      const handleKeyDown = (e) => {
+        if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          setSelected("no");
+        } else if (e.key === "ArrowRight") {
+          e.preventDefault();
+          setSelected("yes");
+        } else if (e.key === "Enter") {
+          e.preventDefault();
+          if (selected === "yes") onYes();
+          else onNo();
+        }
+      };
+      window.addEventListener("keydown", handleKeyDown);
+      return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [selected, onYes, onNo]);
+    return /* @__PURE__ */ React.createElement("div", { style: styles.overlay, onMouseDown: (e) => e.target === e.currentTarget && onNo() }, /* @__PURE__ */ React.createElement("div", { style: { ...styles.modal, width: 320 } }, /* @__PURE__ */ React.createElement("div", { style: { padding: "24px 22px 18px", fontSize: 14.5, color: TOKENS.ink, textAlign: "center", whiteSpace: "pre-line", lineHeight: 1.6 } }, message), /* @__PURE__ */ React.createElement("div", { style: { ...styles.modalFooter, justifyContent: "center" } }, /* @__PURE__ */ React.createElement("button", { style: selected === "no" ? styles.primaryBtn : styles.ghostBtn, onMouseEnter: () => setSelected("no"), onClick: onNo }, "\uC544\uB2C8\uC624"), /* @__PURE__ */ React.createElement("button", { style: selected === "yes" ? styles.primaryBtn : styles.ghostBtn, onMouseEnter: () => setSelected("yes"), onClick: onYes }, "\uC608"))));
   }
   function TabLabelsModal({ labels, categories, customTabs, onCancel, onSave, onAddCustomTab, onRenameCustomTab, onDeleteCustomTab }) {
     const [draft, setDraft] = useState({ ...labels });
@@ -2289,11 +2305,28 @@
     const submit = () => {
       if (!docNumber.trim()) return setError("\uBCC0\uACBD\uBB38\uC11C\uBC88\uD638\uB97C \uC785\uB825\uD574 \uC8FC\uC138\uC694.");
       if (productIds.length === 0) return setError("\uAD00\uB828 \uC81C\uD488\uC744 \uD558\uB098 \uC774\uC0C1 \uC120\uD0DD\uD574 \uC8FC\uC138\uC694.");
+      if (dueDate && dueDate.length !== 10) return setError("\uC644\uB8CC\uC608\uC815\uC77C\uC744 8\uC790\uB9AC \uC22B\uC790\uB85C \uBAA8\uB450 \uC785\uB825\uD574 \uC8FC\uC138\uC694. (\uC608: 20260115)");
       setError("");
       onSubmit({ docNumber, changeName, historyText, noteText, dueDate, productIds, attachment });
     };
     const searchResults = productSearch.trim() ? products.filter((p) => p.name.toLowerCase().includes(productSearch.trim().toLowerCase())).slice().sort(byNameAsc) : [];
-    return /* @__PURE__ */ React.createElement("div", { style: styles.overlay, onMouseDown: (e) => e.target === e.currentTarget && onCancel() }, /* @__PURE__ */ React.createElement("div", { style: styles.modal }, /* @__PURE__ */ React.createElement("div", { style: styles.modalHeader }, /* @__PURE__ */ React.createElement("span", null, isEdit ? "\uBCC0\uACBD \uC218\uC815" : "\uBCC0\uACBD \uB4F1\uB85D"), /* @__PURE__ */ React.createElement("span", { style: styles.modalClose, onClick: onCancel }, "\xD7")), /* @__PURE__ */ React.createElement("div", { style: styles.modalBody }, /* @__PURE__ */ React.createElement("div", { style: styles.registrantBox }, "\uB4F1\uB85D\uC790 ", /* @__PURE__ */ React.createElement("strong", null, isEdit ? (_h = initial.registrant) == null ? void 0 : _h.name : me.name), " (", teamName(teams, isEdit ? (_i = initial.registrant) == null ? void 0 : _i.team : me.team), ")"), /* @__PURE__ */ React.createElement(LabeledInput, { label: "\uBCC0\uACBD\uBB38\uC11C\uBC88\uD638", value: docNumber, onChange: setDocNumber, placeholder: "\uC608) CC-260101-01", mono: true }), /* @__PURE__ */ React.createElement(LabeledInput, { label: "\uBCC0\uACBD\uBA85", value: changeName, onChange: setChangeName, placeholder: "\uC608) \uC6D0\uB8CC \uC81C\uC870\uC6D0 \uCD94\uAC00" }), /* @__PURE__ */ React.createElement(LabeledTextarea, { label: "\uBCC0\uACBD \uB0B4\uC6A9", value: historyText, onChange: setHistoryText, placeholder: "\uBCC0\uACBD \uC0C1\uC138 \uB0B4\uC6A9" }), /* @__PURE__ */ React.createElement(LabeledTextarea, { label: "\uD2B9\uC774\uC0AC\uD56D \uAE30\uC7AC\uB780", value: noteText, onChange: setNoteText, placeholder: "\uCC38\uACE0\uC0AC\uD56D\uC774\uB098 \uC720\uC758\uD560 \uB0B4\uC6A9\uC744 \uC785\uB825\uD558\uC138\uC694" }), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: styles.fieldLabel }, "\uC644\uB8CC\uC608\uC815\uC77C"), /* @__PURE__ */ React.createElement("input", { type: "date", style: styles.input, value: dueDate, onChange: (e) => setDueDate(e.target.value) })), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: styles.fieldLabel }, "\uCCA8\uBD80\uD30C\uC77C"), /* @__PURE__ */ React.createElement("input", { ref: fileInputRef, type: "file", accept: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.hwp,.hwpx,.png,.jpg,.jpeg,.gif,.webp", style: { display: "none" }, onChange: handleFilePick }), attachment ? /* @__PURE__ */ React.createElement("span", { style: styles.tagChip }, "\u{1F4CE} ", attachment.fileName, " ", /* @__PURE__ */ React.createElement("span", { style: { cursor: "pointer", marginLeft: 4 }, onClick: () => setAttachment(null) }, "\xD7")) : /* @__PURE__ */ React.createElement("span", { style: styles.tinyLink, onClick: () => {
+    return /* @__PURE__ */ React.createElement("div", { style: styles.overlay, onMouseDown: (e) => e.target === e.currentTarget && onCancel() }, /* @__PURE__ */ React.createElement("div", { style: styles.modal }, /* @__PURE__ */ React.createElement("div", { style: styles.modalHeader }, /* @__PURE__ */ React.createElement("span", null, isEdit ? "\uBCC0\uACBD \uC218\uC815" : "\uBCC0\uACBD \uB4F1\uB85D"), /* @__PURE__ */ React.createElement("span", { style: styles.modalClose, onClick: onCancel }, "\xD7")), /* @__PURE__ */ React.createElement("div", { style: styles.modalBody }, /* @__PURE__ */ React.createElement("div", { style: styles.registrantBox }, "\uB4F1\uB85D\uC790 ", /* @__PURE__ */ React.createElement("strong", null, isEdit ? (_h = initial.registrant) == null ? void 0 : _h.name : me.name), " (", teamName(teams, isEdit ? (_i = initial.registrant) == null ? void 0 : _i.team : me.team), ")"), /* @__PURE__ */ React.createElement(LabeledInput, { label: "\uBCC0\uACBD\uBB38\uC11C\uBC88\uD638", value: docNumber, onChange: setDocNumber, placeholder: "\uC608) CC-260101-01", mono: true }), /* @__PURE__ */ React.createElement(LabeledInput, { label: "\uBCC0\uACBD\uBA85", value: changeName, onChange: setChangeName, placeholder: "\uC608) \uC6D0\uB8CC \uC81C\uC870\uC6D0 \uCD94\uAC00" }), /* @__PURE__ */ React.createElement(LabeledTextarea, { label: "\uBCC0\uACBD \uB0B4\uC6A9", value: historyText, onChange: setHistoryText, placeholder: "\uBCC0\uACBD \uC0C1\uC138 \uB0B4\uC6A9" }), /* @__PURE__ */ React.createElement(LabeledTextarea, { label: "\uD2B9\uC774\uC0AC\uD56D \uAE30\uC7AC\uB780", value: noteText, onChange: setNoteText, placeholder: "\uCC38\uACE0\uC0AC\uD56D\uC774\uB098 \uC720\uC758\uD560 \uB0B4\uC6A9\uC744 \uC785\uB825\uD558\uC138\uC694" }), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: styles.fieldLabel }, "\uC644\uB8CC\uC608\uC815\uC77C"), /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        type: "text",
+        inputMode: "numeric",
+        style: styles.input,
+        placeholder: "\uC608) 20260115 \uC785\uB825 \uC2DC 2026-01-15\uB85C \uC790\uB3D9 \uBCC0\uD658",
+        value: dueDate,
+        onChange: (e) => {
+          const digits = e.target.value.replace(/\D/g, "").slice(0, 8);
+          let formatted = digits;
+          if (digits.length > 4) formatted = `${digits.slice(0, 4)}-${digits.slice(4)}`;
+          if (digits.length > 6) formatted = `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
+          setDueDate(formatted);
+        }
+      }
+    )), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: styles.fieldLabel }, "\uCCA8\uBD80\uD30C\uC77C"), /* @__PURE__ */ React.createElement("input", { ref: fileInputRef, type: "file", accept: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.hwp,.hwpx,.png,.jpg,.jpeg,.gif,.webp", style: { display: "none" }, onChange: handleFilePick }), attachment ? /* @__PURE__ */ React.createElement("span", { style: styles.tagChip }, "\u{1F4CE} ", attachment.fileName, " ", /* @__PURE__ */ React.createElement("span", { style: { cursor: "pointer", marginLeft: 4 }, onClick: () => setAttachment(null) }, "\xD7")) : /* @__PURE__ */ React.createElement("span", { style: styles.tinyLink, onClick: () => {
       var _a2;
       return (_a2 = fileInputRef.current) == null ? void 0 : _a2.click();
     } }, uploading ? "\uC5C5\uB85C\uB4DC \uC911\u2026" : "+ \uD30C\uC77C \uCCA8\uBD80")), /* @__PURE__ */ React.createElement("div", { style: styles.fieldLabel }, "\uAD00\uB828 \uC81C\uD488 \uC120\uD0DD ", productIds.length > 0 && /* @__PURE__ */ React.createElement("span", { style: { color: TOKENS.navy } }, "(", productIds.length, "\uAC1C \uC120\uD0DD\uB428)")), products.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: TOKENS.ink3, marginBottom: 4 } }, "\uB4F1\uB85D\uB41C \uC81C\uD488\uC774 \uC5C6\uC2B5\uB2C8\uB2E4. \uC0AC\uC774\uB4DC\uBC14\uC5D0\uC11C \uBA3C\uC800 \uC81C\uD488\uC744 \uCD94\uAC00\uD574 \uC8FC\uC138\uC694.") : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("input", { style: { ...styles.input, marginBottom: 10 }, placeholder: "\uC81C\uD488\uBA85\uC73C\uB85C \uAC80\uC0C9\uD574\uC11C \uCD94\uAC00", value: productSearch, onChange: (e) => setProductSearch(e.target.value) }), productSearch.trim() ? /* @__PURE__ */ React.createElement("div", { style: styles.productPickWrap }, searchResults.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, color: TOKENS.ink3 } }, "\uAC80\uC0C9 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.") : searchResults.map((p) => {
@@ -2482,6 +2515,7 @@
     completeBtnCompact: { border: `1px solid ${TOKENS.navy}`, background: "#fff", color: TOKENS.navy, borderRadius: 14, padding: "4px 10px", fontSize: 12, cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" },
     primaryBtn: { background: TOKENS.navyDeep, color: "#F5F3EC", border: "none", borderRadius: 6, padding: "9px 18px", fontSize: 13.5, cursor: "pointer", fontWeight: 600 },
     ghostBtn: { background: "transparent", color: TOKENS.ink2, border: `1px solid ${TOKENS.line}`, borderRadius: 6, padding: "9px 18px", fontSize: 13.5, cursor: "pointer" },
+    confirmBtnSelected: { boxShadow: `0 0 0 3px #E4EAF3, 0 0 0 2px ${TOKENS.navy} inset` },
     smallPrimaryBtn: { background: TOKENS.navyDeep, color: "#F5F3EC", border: "none", borderRadius: 5, padding: "5px 10px", fontSize: 12, cursor: "pointer" },
     smallGhostBtn: { background: "transparent", color: TOKENS.ink2, border: `1px solid ${TOKENS.line}`, borderRadius: 5, padding: "5px 10px", fontSize: 12, cursor: "pointer" },
     overlay: { position: "fixed", inset: 0, background: "rgba(29,43,54,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 20 },
